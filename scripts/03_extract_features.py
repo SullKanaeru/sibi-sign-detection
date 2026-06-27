@@ -19,8 +19,9 @@ hands = mp_hands.Hands(
     min_detection_confidence=0.5
 )
 
-DATA_DIR = '../data/raw'
-OUTPUT_CSV = '../data/static_features.csv'
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, 'data', 'raw')
+OUTPUT_CSV = os.path.join(BASE_DIR, 'data', 'static_features.csv')
 
 def extract_landmarks(image_path):
     """

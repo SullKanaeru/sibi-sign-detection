@@ -27,11 +27,14 @@ from pathlib import Path
 # ─────────────────────────────────────────
 # CONFIGURATION
 # ─────────────────────────────────────────
+import os
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 LETTERS          = ["J", "Z"]       # The dynamic gesture classes to collect
 SAMPLES_PER_LETTER = 200            # Target number of sequence samples per gesture
 FRAMES_PER_SAMPLE  = 60             # Number of frames per sequence (~2 seconds at 30fps)
 COUNTDOWN_SEC      = 3              # Countdown duration before recording begins
-DATASET_DIR        = "../data/raw"  # Output directory for the datasets
+DATASET_DIR        = os.path.join(BASE_DIR, "data", "raw")  # Output directory for the datasets
 CAMERA_INDEX       = 0              # Adjust if using an external webcam
 
 # Colors (BGR format for OpenCV)

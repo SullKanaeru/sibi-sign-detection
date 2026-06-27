@@ -17,8 +17,11 @@ hands = mp_hands.Hands(
     min_tracking_confidence=0.5
 )
 
-# Output directory for the raw image dataset
-DATA_DIR = '../data/raw'
+# ─────────────────────────────────────────
+# CONFIGURATION
+# ─────────────────────────────────────────
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data", "raw")     # Output directory for raw images
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 

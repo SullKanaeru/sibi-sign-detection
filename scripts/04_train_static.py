@@ -13,8 +13,9 @@ from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 
 # Configuration paths
-DATA_PATH = '../data/static_features.csv'
-MODEL_NAME = '../models/model_static.keras'
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_PATH = os.path.join(BASE_DIR, 'data', 'static_features.csv')
+MODEL_NAME = os.path.join(BASE_DIR, 'models', 'model_static.keras')
 
 def plot_history(history):
     """Plots and saves the training accuracy and loss history."""
@@ -39,8 +40,9 @@ def plot_history(history):
     plt.legend(loc='upper right')
     
     plt.tight_layout()
-    plt.savefig('../logs/static_training_history.png')
-    print("[INFO] Training history graph saved as '../logs/static_training_history.png'")
+    log_path = os.path.join(BASE_DIR, 'logs', 'static_training_history.png')
+    plt.savefig(log_path)
+    print(f"[INFO] Training history graph saved as '{log_path}'")
 
 def normalize_landmarks(features):
     """
@@ -116,7 +118,8 @@ def main():
     print(f"[INFO] Found {num_classes} classes: {encoder.classes_}")
     
     # Save the label encoding map for real-time inference
-    np.save('../models/static_classes.npy', encoder.classes_)
+    class_path = os.path.join(BASE_DIR, 'models', 'static_classes.npy')
+    np.save(class_path, encoder.classes_)
     
     # Split the dataset (80% training, 20% validation)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)

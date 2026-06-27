@@ -12,8 +12,9 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # Configuration paths
-DATA_DIR = '../data/raw' # Note: Assumes dynamic sequence files (.npy) are stored under their respective class folders
-MODEL_NAME = '../models/model_dynamic.keras'
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, 'data', 'raw') # Note: Assumes dynamic sequence files (.npy) are stored under their respective class folders
+MODEL_NAME = os.path.join(BASE_DIR, 'models', 'model_dynamic.keras')
 
 def plot_history(history):
     """Plots and saves the LSTM training accuracy and loss history."""
@@ -36,8 +37,9 @@ def plot_history(history):
     plt.legend(loc='upper right')
     
     plt.tight_layout()
-    plt.savefig('../logs/dynamic_training_history.png')
-    print("[INFO] Training history graph saved as '../logs/dynamic_training_history.png'")
+    log_path = os.path.join(BASE_DIR, 'logs', 'dynamic_training_history.png')
+    plt.savefig(log_path)
+    print(f"[INFO] Training history graph saved as '{log_path}'")
 
 def normalize_sequence(seq):
     """
@@ -110,7 +112,8 @@ def main():
     num_classes = len(encoder.classes_)
     
     # Save the label encoding map for real-time inference mapping
-    np.save('../models/dynamic_classes.npy', encoder.classes_)
+    class_path = os.path.join(BASE_DIR, 'models', 'dynamic_classes.npy')
+    np.save(class_path, encoder.classes_)
 
     # Split the dataset (80% training, 20% validation)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
