@@ -44,14 +44,27 @@ dynamic_display_timer = 0 # Frame countdown for how long the dynamic prediction 
 
 def extract_and_normalize_landmarks(hand_landmarks):
     """
-    Extracts 21 3D landmarks and normalizes them by subtracting the wrist coordinates.
-    Computes pairwise Euclidean distances for the static model's feature engineering.
+    Extracts 21 3D landmarks and applies the same feature engineering pipeline
+    used during training to ensure inference is fully consistent.
     
-    Returns 2 arrays:
-    1. norm_coords (63 elements): Baseline features for the dynamic model (LSTM).
-    2. augmented_features (273 elements): Enriched features for the static model (Dense).
+    Feature set (277 features total for the static model):
+    1. norm_coords       (63 features): Wrist-relative normalized coordinates for LSTM.
+    2. pairwise distances(210 features): Euclidean distances between all landmark pairs.
+    3. Scale Invariance              : All features divided by max absolute coordinate.
+    4. Signed crossing features (4 features): Signed X/Z differences between index and
+       middle fingertips/PIP joints to directly discriminate 'U' (parallel) vs 'R' (crossed).
+    
+    Returns:
+        norm_coords_arr    (np.ndarray, 63): Features for the dynamic LSTM model.
+        augmented_features (np.ndarray, 277): Features for the static Dense model.
     """
     import math
+    
+    # MediaPipe landmark indices for finger crossing detection
+    IDX_INDEX_TIP  = 8   # Index finger tip
+    IDX_MIDDLE_TIP = 12  # Middle finger tip
+    IDX_INDEX_PIP  = 7   # Index finger PIP (proximal interphalangeal) joint
+    IDX_MIDDLE_PIP = 11  # Middle finger PIP joint
     
     # Extract the wrist coordinates (landmark index 0)
     wx = hand_landmarks.landmark[0].x
@@ -81,10 +94,21 @@ def extract_and_normalize_landmarks(hand_landmarks):
     if max_val > 0:
         norm_coords = [x / max_val for x in norm_coords]
         distances = [d / max_val for d in distances]
-            
-    augmented_features = norm_coords + distances
+    
+    # Signed Finger Crossing Features (4 features)
+    # Positive cross_x_tip means index tip is to the RIGHT of middle tip
+    # In 'R', fingers are crossed so the sign of these values will differ from 'U'
+    scale = max_val if max_val > 0 else 1.0
+    cross_x_tip = (points[IDX_INDEX_TIP][0] - points[IDX_MIDDLE_TIP][0]) / scale
+    cross_z_tip = (points[IDX_INDEX_TIP][2] - points[IDX_MIDDLE_TIP][2]) / scale
+    cross_x_pip = (points[IDX_INDEX_PIP][0] - points[IDX_MIDDLE_PIP][0]) / scale
+    cross_z_pip = (points[IDX_INDEX_PIP][2] - points[IDX_MIDDLE_PIP][2]) / scale
+    crossing_features = [cross_x_tip, cross_z_tip, cross_x_pip, cross_z_pip]
+        
+    augmented_features = norm_coords + distances + crossing_features
     
     return np.array(norm_coords), np.array(augmented_features)
+
 
 def main():
     global is_recording_dynamic, dynamic_frames, dynamic_result_text, dynamic_display_timer

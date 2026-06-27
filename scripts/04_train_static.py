@@ -46,22 +46,42 @@ def plot_history(history):
 
 def normalize_landmarks(features):
     """
-    Coordinate Normalization and Feature Engineering (Pairwise Distances).
-    1. Subtracts the wrist coordinates (origin) from all other hand landmarks.
-    2. Computes the Euclidean distance between every pair of landmarks (210 pairwise distances).
-    This significantly boosts classification accuracy for highly similar gestures (e.g., U vs R).
+    Coordinate Normalization and Feature Engineering.
+    Extracts a rich feature set to maximize discriminability between visually similar gestures:
+
+    1. Normalized Coordinates (63 features):
+       Subtracts wrist position (landmark 0) so all coordinates are wrist-relative.
+
+    2. Pairwise Euclidean Distances (210 features):
+       Captures the overall shape and proportional geometry of the hand.
+
+    3. Scale Invariance:
+       Divides all features by the max absolute coordinate so the model is
+       fully invariant to how close or far the hand is from the camera.
+
+    4. Signed Finger Crossing Features (4 features):
+       Computes the SIGNED (directional) difference in X and Z coordinates
+       between the index fingertip (landmark 8) and middle fingertip (landmark 12).
+       This directly encodes whether the fingers are CROSSED (R) or PARALLEL (U),
+       which pure Euclidean distance cannot capture reliably.
     """
     import math
     augmented_features = []
     
+    # MediaPipe landmark indices for relevant fingertips
+    IDX_INDEX_TIP  = 8   # Index finger tip
+    IDX_MIDDLE_TIP = 12  # Middle finger tip
+    IDX_INDEX_PIP  = 7   # Index finger PIP (proximal interphalangeal) joint
+    IDX_MIDDLE_PIP = 11  # Middle finger PIP joint
+    
     for i in range(len(features)):
         row = features[i]
-        # Wrist coordinates (first 3 elements)
+        # Wrist coordinates (first 3 elements - landmark 0)
         wx, wy, wz = row[0], row[1], row[2]
         
         # 1. Normalize Coordinates (63 features)
         norm_coords = []
-        points = [] # Store points for distance calculation
+        points = [] # Store wrist-relative (x, y, z) for each of 21 landmarks
         for j in range(0, 63, 3):
             nx = row[j] - wx
             ny = row[j+1] - wy
@@ -86,8 +106,22 @@ def normalize_landmarks(features):
         if max_val > 0:
             norm_coords = [x / max_val for x in norm_coords]
             distances = [d / max_val for d in distances]
+            
+        # 4. Signed Finger Crossing Features (4 features)
+        # For U vs R discrimination: index and middle fingertips cross in R but not in U.
+        # SIGNED differences (not absolute) directly encode the direction of crossing.
+        # - cross_x_tip  : positive if index tip is to the right of middle tip
+        # - cross_z_tip  : positive if index tip is further from camera than middle tip
+        # - cross_x_pip  : same but at the PIP joints (helps capture mid-finger crossing)
+        # - cross_z_pip  : same z difference at PIP joints
+        scale = max_val if max_val > 0 else 1.0
+        cross_x_tip = (points[IDX_INDEX_TIP][0] - points[IDX_MIDDLE_TIP][0]) / scale
+        cross_z_tip = (points[IDX_INDEX_TIP][2] - points[IDX_MIDDLE_TIP][2]) / scale
+        cross_x_pip = (points[IDX_INDEX_PIP][0] - points[IDX_MIDDLE_PIP][0]) / scale
+        cross_z_pip = (points[IDX_INDEX_PIP][2] - points[IDX_MIDDLE_PIP][2]) / scale
+        crossing_features = [cross_x_tip, cross_z_tip, cross_x_pip, cross_z_pip]
                 
-        augmented_features.append(norm_coords + distances)
+        augmented_features.append(norm_coords + distances + crossing_features)
         
     return np.array(augmented_features, dtype=np.float32)
 
