@@ -1,0 +1,14 @@
+# Virtual Environments
+.venv/
+env/
+venv/
+__pycache__/
+
+# Datasets & Large Files
+dataset/
+*.keras
+*.csv
+*.npy
+
+# IDEs
+.vscode/
