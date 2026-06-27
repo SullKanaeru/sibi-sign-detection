@@ -77,6 +77,14 @@ def normalize_landmarks(features):
                 dist = math.sqrt(dx*dx + dy*dy + dz*dz)
                 distances.append(dist)
                 
+        # 3. Scale Invariance
+        # Divide all coordinates and distances by the maximum absolute coordinate value in this frame
+        # This ensures the features are invariant to the distance of the hand from the camera
+        max_val = max([abs(x) for x in norm_coords])
+        if max_val > 0:
+            norm_coords = [x / max_val for x in norm_coords]
+            distances = [d / max_val for d in distances]
+                
         augmented_features.append(norm_coords + distances)
         
     return np.array(augmented_features, dtype=np.float32)
@@ -119,11 +127,18 @@ def main():
     # Build the Dense Neural Network Model
     # Since we use 273 features (63 coordinates + 210 distances), wider layers are preferred.
     model = tf.keras.models.Sequential([
-        tf.keras.layers.Dense(256, activation='relu', input_shape=(X_train.shape[1],)),
+        tf.keras.layers.Dense(512, activation='relu', input_shape=(X_train.shape[1],)),
+        tf.keras.layers.BatchNormalization(),
         tf.keras.layers.Dropout(0.3), # Prevent overfitting
+        
+        tf.keras.layers.Dense(256, activation='relu'),
+        tf.keras.layers.BatchNormalization(),
+        tf.keras.layers.Dropout(0.3),
+        
         tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.BatchNormalization(),
         tf.keras.layers.Dropout(0.2),
-        tf.keras.layers.Dense(64, activation='relu'),
+        
         tf.keras.layers.Dense(num_classes, activation='softmax') # Output layer
     ])
     
@@ -133,13 +148,17 @@ def main():
                   
     model.summary()
     
+    # EarlyStopping prevents overfitting by halting training when validation loss stops improving
+    early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True)
+    
     # Train the model
     print("[INFO] Starting model training...")
     history = model.fit(
         X_train, y_train,
-        epochs=50,
+        epochs=150,
         batch_size=32,
-        validation_data=(X_test, y_test)
+        validation_data=(X_test, y_test),
+        callbacks=[early_stop]
     )
     
     # Evaluate performance on validation set

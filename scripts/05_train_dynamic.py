@@ -58,6 +58,11 @@ def normalize_sequence(seq):
             lz = frame_landmarks[i, 2] - wz
             flat_landmarks.extend([lx, ly, lz])
             
+        # Scale Invariance: Divide by the maximum absolute coordinate value in this frame
+        max_val = max([abs(x) for x in flat_landmarks])
+        if max_val > 0:
+            flat_landmarks = [x / max_val for x in flat_landmarks]
+            
         seq_normalized[frame_idx] = np.array(flat_landmarks)
         
     return seq_normalized
@@ -129,13 +134,16 @@ def main():
     model.summary()
     
     # Train the model
-    # LSTM networks typically converge quickly on small datasets; 50-70 epochs is standard.
+    # EarlyStopping prevents overfitting by halting training when validation loss stops improving
+    early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True)
+    
     print("[INFO] Initiating LSTM model training...")
     history = model.fit(
         X_train, y_train,
-        epochs=70,
+        epochs=150,
         batch_size=32,
-        validation_data=(X_test, y_test)
+        validation_data=(X_test, y_test),
+        callbacks=[early_stop]
     )
     
     # Evaluate model performance on validation set

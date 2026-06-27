@@ -29,7 +29,7 @@ from pathlib import Path
 # ─────────────────────────────────────────
 LETTERS          = ["J", "Z"]       # The dynamic gesture classes to collect
 SAMPLES_PER_LETTER = 200            # Target number of sequence samples per gesture
-FRAMES_PER_SAMPLE  = 30             # Number of frames per sequence (~1 second at 30fps)
+FRAMES_PER_SAMPLE  = 90             # Number of frames per sequence (~3 seconds at 30fps)
 COUNTDOWN_SEC      = 3              # Countdown duration before recording begins
 DATASET_DIR        = "../data/raw"  # Output directory for the datasets
 CAMERA_INDEX       = 0              # Adjust if using an external webcam

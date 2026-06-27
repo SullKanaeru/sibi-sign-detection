@@ -38,7 +38,7 @@ hands = mp_hands.Hands(
 # State Variables for Dynamic Gesture Recording
 is_recording_dynamic = False
 dynamic_frames = []
-MAX_DYNAMIC_FRAMES = 30
+MAX_DYNAMIC_FRAMES = 90
 dynamic_result_text = ""
 dynamic_display_timer = 0 # Frame countdown for how long the dynamic prediction result remains on screen
 
@@ -75,6 +75,12 @@ def extract_and_normalize_landmarks(hand_landmarks):
             dz = points[p1][2] - points[p2][2]
             dist = math.sqrt(dx*dx + dy*dy + dz*dz)
             distances.append(dist)
+            
+    # Scale Invariance: Divide by the maximum absolute coordinate value in this frame
+    max_val = max([abs(x) for x in norm_coords])
+    if max_val > 0:
+        norm_coords = [x / max_val for x in norm_coords]
+        distances = [d / max_val for d in distances]
             
     augmented_features = norm_coords + distances
     
