@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # Konfigurasi
-DATA_DIR = 'dataset' # Asumsi: dataset dinamis J dan Z ada di dataset/J/ dan dataset/Z/
-MODEL_NAME = 'model_dynamic.keras'
+DATA_DIR = '../data/raw' # Asumsi: dataset dinamis J dan Z ada di dataset/J/ dan dataset/Z/
+MODEL_NAME = '../models/model_dynamic.keras'
 
 def plot_history(history):
     plt.figure(figsize=(10, 4))
@@ -35,8 +35,8 @@ def plot_history(history):
     plt.legend(loc='upper right')
     
     plt.tight_layout()
-    plt.savefig('dynamic_training_history.png')
-    print("[INFO] Grafik pelatihan disimpan sebagai 'dynamic_training_history.png'")
+    plt.savefig('../logs/dynamic_training_history.png')
+    print("[INFO] Grafik pelatihan disimpan sebagai '../logs/dynamic_training_history.png'")
 
 def normalize_sequence(seq):
     """
@@ -105,7 +105,7 @@ def main():
     num_classes = len(encoder.classes_)
     
     # Simpan mapping label agar nanti saat inferensi kita tahu 0 itu huruf apa
-    np.save('dynamic_classes.npy', encoder.classes_)
+    np.save('../models/dynamic_classes.npy', encoder.classes_)
 
     # Membagi data latih dan uji (80% train, 20% validation)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)

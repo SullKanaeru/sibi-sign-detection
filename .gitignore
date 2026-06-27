@@ -5,10 +5,7 @@ venv/
 __pycache__/
 
 # Datasets & Large Files
-dataset/
-*.keras
-*.csv
-*.npy
+data/
 
 # IDEs
 .vscode/

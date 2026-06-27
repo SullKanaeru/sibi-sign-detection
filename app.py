@@ -10,12 +10,12 @@ import tensorflow as tf
 print("[INFO] Memuat model statis dan dinamis...")
 # Memuat model
 try:
-    model_static = tf.keras.models.load_model('model_static.keras')
-    model_dynamic = tf.keras.models.load_model('model_dynamic.keras')
+    model_static = tf.keras.models.load_model('models/model_static.keras')
+    model_dynamic = tf.keras.models.load_model('models/model_dynamic.keras')
     
     # Memuat label huruf
-    static_classes = np.load('static_classes.npy', allow_pickle=True)
-    dynamic_classes = np.load('dynamic_classes.npy', allow_pickle=True)
+    static_classes = np.load('models/static_classes.npy', allow_pickle=True)
+    dynamic_classes = np.load('models/dynamic_classes.npy', allow_pickle=True)
     print(f"[INFO] Kelas Statis : {static_classes}")
     print(f"[INFO] Kelas Dinamis: {dynamic_classes}")
 except Exception as e:

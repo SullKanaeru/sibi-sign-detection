@@ -31,7 +31,7 @@ LETTERS          = ["J", "Z"]       # huruf yang dikumpulkan
 SAMPLES_PER_LETTER = 200            # target jumlah sample per huruf
 FRAMES_PER_SAMPLE  = 30            # jumlah frame per satu rekaman (~1 detik di 30fps)
 COUNTDOWN_SEC      = 3             # hitungan mundur sebelum rekam
-DATASET_DIR        = "dataset"     # folder output
+DATASET_DIR        = "../data/raw"     # folder output
 CAMERA_INDEX       = 0             # ganti jika kamera bukan /dev/video0
 
 # Warna (BGR)

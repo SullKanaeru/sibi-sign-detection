@@ -9,7 +9,7 @@ mp_drawing_styles = mp.solutions.drawing_styles
 
 hands = mp_hands.Hands(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-DATA_DIR = './dataset'
+DATA_DIR = '../data/raw'
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 

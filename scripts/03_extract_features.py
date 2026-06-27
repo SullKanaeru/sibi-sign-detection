@@ -18,8 +18,8 @@ hands = mp_hands.Hands(
     min_detection_confidence=0.5
 )
 
-DATA_DIR = './dataset'
-OUTPUT_CSV = 'static_dataset.csv'
+DATA_DIR = '../data/raw'
+OUTPUT_CSV = '../data/static_features.csv'
 
 def extract_landmarks(image_path):
     """

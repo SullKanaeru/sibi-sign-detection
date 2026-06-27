@@ -12,8 +12,8 @@ from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 
 # Konfigurasi
-DATA_PATH = 'static_dataset.csv'
-MODEL_NAME = 'model_static.keras'
+DATA_PATH = '../data/static_features.csv'
+MODEL_NAME = '../models/model_static.keras'
 
 def plot_history(history):
     """Fungsi untuk memplot loss dan akurasi selama pelatihan."""
@@ -38,8 +38,8 @@ def plot_history(history):
     plt.legend(loc='upper right')
     
     plt.tight_layout()
-    plt.savefig('static_training_history.png')
-    print("[INFO] Grafik pelatihan disimpan sebagai 'static_training_history.png'")
+    plt.savefig('../logs/static_training_history.png')
+    print("[INFO] Grafik pelatihan disimpan sebagai '../logs/static_training_history.png'")
 
 def normalize_landmarks(features):
     """
@@ -105,7 +105,7 @@ def main():
     print(f"[INFO] Kelas yang ditemukan ({num_classes}): {encoder.classes_}")
     
     # Simpan mapping label agar nanti saat inferensi kita tahu 0 itu huruf apa
-    np.save('static_classes.npy', encoder.classes_)
+    np.save('../models/static_classes.npy', encoder.classes_)
     
     # Membagi data latih dan uji (80% train, 20% validation)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
