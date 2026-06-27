@@ -1,5 +1,5 @@
 import os
-# Matatkan pesan warning TensorFlow agar terminal lebih rapi
+# Suppress TensorFlow logging to keep the terminal output clean
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 import cv2
@@ -7,23 +7,23 @@ import numpy as np
 import mediapipe as mp
 import tensorflow as tf
 
-print("[INFO] Memuat model statis dan dinamis...")
-# Memuat model
+print("[INFO] Loading static and dynamic models...")
+# Load the pre-trained Keras models
 try:
     model_static = tf.keras.models.load_model('models/model_static.keras')
     model_dynamic = tf.keras.models.load_model('models/model_dynamic.keras')
     
-    # Memuat label huruf
+    # Load the label encoders to map numeric predictions back to string labels
     static_classes = np.load('models/static_classes.npy', allow_pickle=True)
     dynamic_classes = np.load('models/dynamic_classes.npy', allow_pickle=True)
-    print(f"[INFO] Kelas Statis : {static_classes}")
-    print(f"[INFO] Kelas Dinamis: {dynamic_classes}")
+    print(f"[INFO] Static Classes : {static_classes}")
+    print(f"[INFO] Dynamic Classes: {dynamic_classes}")
 except Exception as e:
-    print(f"[ERROR] Gagal memuat model atau label: {e}")
-    print("[ERROR] Pastikan train_static.py dan train_dynamic.py sudah berhasil dijalankan.")
+    print(f"[ERROR] Failed to load models or labels: {e}")
+    print("[ERROR] Ensure that 04_train_static.py and 05_train_dynamic.py have been executed successfully.")
     exit(1)
 
-# Setup MediaPipe Hands
+# Initialize MediaPipe Hands for real-time tracking
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -35,23 +35,25 @@ hands = mp_hands.Hands(
     min_tracking_confidence=0.5
 )
 
-# Variabel State untuk Deteksi Dinamis
+# State Variables for Dynamic Gesture Recording
 is_recording_dynamic = False
 dynamic_frames = []
 MAX_DYNAMIC_FRAMES = 30
 dynamic_result_text = ""
-dynamic_display_timer = 0 # Berapa frame tulisan hasil dinamis akan bertahan di layar
+dynamic_display_timer = 0 # Frame countdown for how long the dynamic prediction result remains on screen
 
 def extract_and_normalize_landmarks(hand_landmarks):
     """
-    Ekstrak 21 titik, kurangi dengan koordinat pergelangan tangan (wrist).
-    Mengembalikan 2 array:
-    1. norm_coords (63 elemen) untuk model dinamis.
-    2. augmented_features (273 elemen: 63 koordinat + 210 jarak) untuk model statis.
+    Extracts 21 3D landmarks and normalizes them by subtracting the wrist coordinates.
+    Computes pairwise Euclidean distances for the static model's feature engineering.
+    
+    Returns 2 arrays:
+    1. norm_coords (63 elements): Baseline features for the dynamic model (LSTM).
+    2. augmented_features (273 elements): Enriched features for the static model (Dense).
     """
     import math
     
-    # Ambil koordinat wrist (titik 0)
+    # Extract the wrist coordinates (landmark index 0)
     wx = hand_landmarks.landmark[0].x
     wy = hand_landmarks.landmark[0].y
     wz = hand_landmarks.landmark[0].z
@@ -82,30 +84,30 @@ def main():
     global is_recording_dynamic, dynamic_frames, dynamic_result_text, dynamic_display_timer
     
     cap = cv2.VideoCapture(0)
-    print("\n[INFO] Kamera telah aktif!")
-    print("[INFO] Tekan 'd' untuk mulai merekam huruf dinamis (J atau Z).")
-    print("[INFO] Tekan 'q' untuk keluar.")
+    print("\n[INFO] Camera initialized successfully!")
+    print("[INFO] Press 'd' to start recording a dynamic gesture (J or Z).")
+    print("[INFO] Press 'q' to quit.")
     
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
             
-        # Flip layar agar seperti cermin
+        # Flip the frame horizontally for an intuitive mirror view
         frame = cv2.flip(frame, 1)
         h, w, c = frame.shape
         
-        # Konversi ke RGB untuk MediaPipe
+        # Convert BGR to RGB for MediaPipe processing
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = hands.process(frame_rgb)
         
-        current_text = "Tidak ada isyarat"
+        current_text = "No gesture detected"
         box_color = (0, 0, 0)
         
         if results.multi_hand_landmarks:
             hand_landmarks = results.multi_hand_landmarks[0]
             
-            # Gambar titik-titik di layar
+            # Overlay the hand skeleton on the frame
             mp_drawing.draw_landmarks(
                 frame,
                 hand_landmarks,
@@ -114,83 +116,83 @@ def main():
                 mp_drawing_styles.get_default_hand_connections_style()
             )
             
-            # Ekstrak fitur
+            # Extract both sets of features for the respective models
             features_63, features_273 = extract_and_normalize_landmarks(hand_landmarks)
             
             # ==========================================
-            # LOGIKA DINAMIS (Perekaman J & Z)
+            # DYNAMIC LOGIC (Recording J & Z)
             # ==========================================
             if is_recording_dynamic:
                 dynamic_frames.append(features_63)
                 progress = len(dynamic_frames)
                 
-                # Tampilkan status perekaman
-                cv2.putText(frame, f"MEREKAM DINAMIS: {progress}/{MAX_DYNAMIC_FRAMES}", (w//2 - 200, 40),
+                # Display recording status
+                cv2.putText(frame, f"RECORDING DYNAMIC: {progress}/{MAX_DYNAMIC_FRAMES}", (w//2 - 200, 40),
                             cv2.FONT_HERSHEY_DUPLEX, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
                 
-                # Jika sudah mencapai 30 frame, hentikan dan prediksi
+                # Upon reaching the target frame count, halt recording and execute inference
                 if progress == MAX_DYNAMIC_FRAMES:
-                    # Model membutuhkan bentuk (1, 30, 63) -> (Batch, TimeSteps, Features)
+                    # Model expects shape (1, 30, 63) -> (Batch, TimeSteps, Features)
                     seq_input = np.expand_dims(np.array(dynamic_frames), axis=0)
                     
                     preds = model_dynamic.predict(seq_input, verbose=0)[0]
                     predicted_idx = np.argmax(preds)
                     confidence = preds[predicted_idx]
                     
-                    dynamic_result_text = f"Dinamis: {dynamic_classes[predicted_idx]} ({confidence*100:.1f}%)"
+                    dynamic_result_text = f"Dynamic: {dynamic_classes[predicted_idx]} ({confidence*100:.1f}%)"
                     
-                    # Reset state
+                    # Reset the recording state variables
                     is_recording_dynamic = False
                     dynamic_frames = []
-                    # Tampilkan hasil dinamis selama 90 frame (~3 detik)
+                    # Keep the prediction result visible for 90 frames (~3 seconds)
                     dynamic_display_timer = 90
             else:
                 # ==========================================
-                # LOGIKA STATIS (Setiap saat jika tidak merekam)
+                # STATIC LOGIC (Continuous inference)
                 # ==========================================
-                # Jika masih menampilkan hasil dinamis sebelumnya, jangan tebak statis dulu
+                # Suppress static predictions if a dynamic result is currently being displayed
                 if dynamic_display_timer > 0:
                     current_text = dynamic_result_text
-                    box_color = (0, 255, 255) # Kuning untuk hasil dinamis
+                    box_color = (0, 255, 255) # Yellow denotes a dynamic inference result
                     dynamic_display_timer -= 1
                 else:
-                    # Model statis butuh (1, 273)
+                    # Model expects shape (1, 273)
                     input_static = np.expand_dims(features_273, axis=0)
                     preds = model_static.predict(input_static, verbose=0)[0]
                     predicted_idx = np.argmax(preds)
                     confidence = preds[predicted_idx]
                     
-                    # Tampilkan prediksi jika tingkat keyakinan > 60%
+                    # Display prediction only if it meets a reasonable confidence threshold
                     if confidence > 0.60:
                         current_text = f"{static_classes[predicted_idx]} ({confidence*100:.1f}%)"
-                        box_color = (0, 255, 0) # Hijau untuk statis
+                        box_color = (0, 255, 0) # Green denotes a static inference result
                     else:
-                        current_text = "Kurang yakin"
+                        current_text = "Low confidence"
                         
         else:
-            # Jika tidak ada tangan, pastikan timer dinamis tetap berjalan
+            # Continue ticking down the display timer even when no hand is present
             if dynamic_display_timer > 0:
                 current_text = dynamic_result_text
                 box_color = (0, 255, 255)
                 dynamic_display_timer -= 1
         
-        # Desain UI Sederhana (Background Hitam untuk teks)
+        # Simple UI Design (Colored background banner for text visibility)
         cv2.rectangle(frame, (0, h-60), (w, h), box_color, -1)
         cv2.putText(frame, current_text, (20, h-20), 
                     cv2.FONT_HERSHEY_DUPLEX, 1.2, (255, 255, 255), 2, cv2.LINE_AA)
         
-        # Panduan shortcut
-        cv2.putText(frame, "[D]: Rekam J/Z   [Q]: Keluar", (20, 30), 
+        # Hotkey guide overlay
+        cv2.putText(frame, "[D]: Record J/Z   [Q]: Quit", (20, 30), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
                     
-        cv2.imshow('Aplikasi Penerjemah SIBI Real-time', frame)
+        cv2.imshow('SIBI Real-time Translator', frame)
         
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
         elif key == ord('d') and not is_recording_dynamic:
             is_recording_dynamic = True
-            dynamic_frames = [] # Kosongkan buffer
+            dynamic_frames = [] # Flush buffer before recording
             
     cap.release()
     cv2.destroyAllWindows()

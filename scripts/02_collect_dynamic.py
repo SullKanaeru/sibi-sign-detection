@@ -1,10 +1,10 @@
 """
 SIBI Dynamic Gesture Dataset Collector
-Untuk mengumpulkan dataset huruf J dan Z (gerakan dinamis)
-Menyimpan landmark sequence dari MediaPipe Hands
+Used for capturing sequence-based gestures (e.g., J and Z)
+Saves MediaPipe Hands landmark sequences directly to disk.
 
-Struktur output:
-  dataset/
+Output structure:
+  data/raw/
     J/
       seq_0001.npy   # shape: (N_frames, 21, 3)
       seq_0002.npy
@@ -25,16 +25,16 @@ import time
 from pathlib import Path
 
 # ─────────────────────────────────────────
-# KONFIGURASI
+# CONFIGURATION
 # ─────────────────────────────────────────
-LETTERS          = ["J", "Z"]       # huruf yang dikumpulkan
-SAMPLES_PER_LETTER = 200            # target jumlah sample per huruf
-FRAMES_PER_SAMPLE  = 30            # jumlah frame per satu rekaman (~1 detik di 30fps)
-COUNTDOWN_SEC      = 3             # hitungan mundur sebelum rekam
-DATASET_DIR        = "../data/raw"     # folder output
-CAMERA_INDEX       = 0             # ganti jika kamera bukan /dev/video0
+LETTERS          = ["J", "Z"]       # The dynamic gesture classes to collect
+SAMPLES_PER_LETTER = 200            # Target number of sequence samples per gesture
+FRAMES_PER_SAMPLE  = 30             # Number of frames per sequence (~1 second at 30fps)
+COUNTDOWN_SEC      = 3              # Countdown duration before recording begins
+DATASET_DIR        = "../data/raw"  # Output directory for the datasets
+CAMERA_INDEX       = 0              # Adjust if using an external webcam
 
-# Warna (BGR)
+# Colors (BGR format for OpenCV)
 WHITE  = (255, 255, 255)
 BLACK  = (0,   0,   0)
 GREEN  = (0,   200, 80)
@@ -44,7 +44,7 @@ GRAY   = (180, 180, 180)
 DARK   = (40,  40,  40)
 
 # ─────────────────────────────────────────
-# SETUP MEDIAPIPE
+# MEDIAPIPE INITIALIZATION
 # ─────────────────────────────────────────
 mp_hands   = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
@@ -59,18 +59,18 @@ hands = mp_hands.Hands(
 
 
 # ─────────────────────────────────────────
-# UTILS
+# UTILITY FUNCTIONS
 # ─────────────────────────────────────────
 def extract_landmarks(results):
-    """Ambil 21 landmark (x, y, z) dari hasil MediaPipe. Return None jika tidak terdeteksi."""
+    """Extracts the 21 3D landmarks from MediaPipe results. Returns None if no hand is detected."""
     if not results.multi_hand_landmarks:
         return None
     lm = results.multi_hand_landmarks[0].landmark
-    return np.array([[p.x, p.y, p.z] for p in lm], dtype=np.float32)  # (21, 3)
+    return np.array([[p.x, p.y, p.z] for p in lm], dtype=np.float32)  # Shape: (21, 3)
 
 
 def count_saved(letter):
-    """Hitung file .npy yang sudah tersimpan untuk huruf tertentu."""
+    """Counts the number of successfully saved .npy sequences for a given gesture."""
     folder = Path(DATASET_DIR) / letter
     if not folder.exists():
         return 0
@@ -78,7 +78,7 @@ def count_saved(letter):
 
 
 def save_sequence(letter, sequence):
-    """Simpan sequence landmark ke file .npy."""
+    """Saves a landmark sequence to a .npy file with auto-incrementing filenames."""
     folder = Path(DATASET_DIR) / letter
     folder.mkdir(parents=True, exist_ok=True)
     idx = count_saved(letter) + 1
@@ -88,7 +88,7 @@ def save_sequence(letter, sequence):
 
 
 def overlay_text(frame, text, pos, size=0.8, color=WHITE, thickness=2, bg=None):
-    """Tulis teks dengan optional background box."""
+    """Draws text on the frame with an optional solid background box for readability."""
     font = cv2.FONT_HERSHEY_SIMPLEX
     (tw, th), baseline = cv2.getTextSize(text, font, size, thickness)
     x, y = pos
@@ -99,7 +99,7 @@ def overlay_text(frame, text, pos, size=0.8, color=WHITE, thickness=2, bg=None):
 
 
 def draw_progress_bar(frame, current, total, x, y, w, h):
-    """Gambar progress bar rekaman."""
+    """Draws a progress bar indicating recording duration."""
     cv2.rectangle(frame, (x, y), (x + w, y + h), DARK, -1)
     filled = int(w * (current / total))
     cv2.rectangle(frame, (x, y), (x + filled, y + h), GREEN, -1)
@@ -107,7 +107,7 @@ def draw_progress_bar(frame, current, total, x, y, w, h):
 
 
 def draw_sample_progress(frame, saved, target, x, y, w, h):
-    """Gambar progress bar jumlah sample."""
+    """Draws a progress bar indicating overall collection quota progress."""
     cv2.rectangle(frame, (x, y), (x + w, y + h), DARK, -1)
     filled = int(w * min(saved / target, 1.0))
     color = GREEN if saved >= target else YELLOW
@@ -116,7 +116,7 @@ def draw_sample_progress(frame, saved, target, x, y, w, h):
 
 
 def draw_landmark_on_frame(frame, results):
-    """Gambar koneksi landmark tangan di frame."""
+    """Renders the hand landmark skeleton onto the given frame."""
     if results.multi_hand_landmarks:
         for hand_lm in results.multi_hand_landmarks:
             mp_drawing.draw_landmarks(
@@ -129,29 +129,29 @@ def draw_landmark_on_frame(frame, results):
 
 
 # ─────────────────────────────────────────
-# LAYAR: PANDUAN GERAKAN
+# UI SCREENS: GESTURE GUIDES
 # ─────────────────────────────────────────
 GUIDES = {
     "J": [
-        "Bentuk tangan seperti huruf 'I'",
-        "(kelingking tegak, jempol keluar)",
+        "Shape your hand like the letter 'I'",
+        "(pinky extended, thumb out)",
         "",
-        "Gerakkan kelingking membentuk",
-        "lengkungan huruf J dari atas ke bawah",
-        "lalu ke kiri (seperti menulis J)",
+        "Move your pinky to draw",
+        "a 'J' shape in the air:",
+        "downwards, then curving left",
     ],
     "Z": [
-        "Arahkan jari telunjuk ke depan",
+        "Point your index finger forward",
         "",
-        "Gerakkan telunjuk membentuk",
-        "zigzag huruf Z:",
-        "kanan -> kiri-bawah -> kanan",
+        "Use your index finger to trace",
+        "a 'Z' shape in the air:",
+        "right -> diagonally left-down -> right",
     ],
 }
 
 
 def show_guide_screen(cap, letter):
-    """Tampilkan layar panduan gerakan sebelum mulai rekam."""
+    """Displays instructional text for the gesture before recording begins."""
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -159,44 +159,45 @@ def show_guide_screen(cap, letter):
         frame = cv2.flip(frame, 1)
         h, w = frame.shape[:2]
 
-        # Overlay gelap
+        # Apply a dark semi-transparent overlay for readability
         overlay = frame.copy()
         cv2.rectangle(overlay, (0, 0), (w, h), (20, 20, 20), -1)
         frame = cv2.addWeighted(overlay, 0.6, frame, 0.4, 0)
 
-        # Judul
-        overlay_text(frame, f"Panduan Gerakan Huruf  {letter}",
-                     (w // 2 - 220, 70), size=1.0, color=YELLOW, thickness=2)
+        # Title
+        overlay_text(frame, f"Gesture Guide for Letter  {letter}",
+                     (w // 2 - 250, 70), size=1.0, color=YELLOW, thickness=2)
 
-        # Instruksi
+        # Instructions
         for i, line in enumerate(GUIDES[letter]):
-            overlay_text(frame, line, (w // 2 - 200, 140 + i * 38),
+            overlay_text(frame, line, (w // 2 - 220, 140 + i * 38),
                          size=0.65, color=WHITE)
 
-        # Contoh visual sederhana (kotak placeholder)
+        # Simple placeholder graphic box
         box_x, box_y, box_w, box_h = w // 2 - 80, 380, 160, 160
         cv2.rectangle(frame, (box_x, box_y), (box_x + box_w, box_y + box_h), GRAY, 1)
         overlay_text(frame, f"[{letter}]", (box_x + 55, box_y + 95),
                      size=1.4, color=YELLOW, thickness=3)
 
-        overlay_text(frame, "Tekan  SPASI  untuk mulai",
+        # User controls
+        overlay_text(frame, "Press  SPACE  to start",
                      (w // 2 - 160, h - 60), size=0.75, color=GREEN, bg=DARK)
-        overlay_text(frame, "Tekan  Q  untuk keluar",
+        overlay_text(frame, "Press  Q  to quit",
                      (w // 2 - 120, h - 30), size=0.6, color=GRAY)
 
         cv2.imshow("SIBI Dataset Collector", frame)
         key = cv2.waitKey(1) & 0xFF
         if key == ord(' '):
-            return True   # lanjut rekam
+            return True   # Proceed to record
         if key == ord('q'):
-            return False  # keluar
+            return False  # Quit
 
 
 # ─────────────────────────────────────────
-# LAYAR: COUNTDOWN
+# UI SCREENS: COUNTDOWN
 # ─────────────────────────────────────────
 def show_countdown(cap, letter, results_holder):
-    """Countdown sebelum rekaman dimulai. Return False jika user quit."""
+    """Displays a countdown timer before recording. Returns False if user quits."""
     start = time.time()
     while True:
         ret, frame = cap.read()
@@ -214,11 +215,11 @@ def show_countdown(cap, letter, results_holder):
             return True
 
         h, w = frame.shape[:2]
-        overlay_text(frame, f"Bersiap...", (w // 2 - 80, h // 2 - 60),
+        overlay_text(frame, f"Get Ready...", (w // 2 - 90, h // 2 - 60),
                      size=0.9, color=YELLOW, bg=DARK)
         overlay_text(frame, str(int(remaining) + 1),
                      (w // 2 - 25, h // 2 + 30), size=2.5, color=GREEN, thickness=4)
-        overlay_text(frame, f"Huruf: {letter}", (w // 2 - 55, h // 2 + 100),
+        overlay_text(frame, f"Letter: {letter}", (w // 2 - 60, h // 2 + 100),
                      size=0.8, color=WHITE)
 
         cv2.imshow("SIBI Dataset Collector", frame)
@@ -228,12 +229,12 @@ def show_countdown(cap, letter, results_holder):
 
 
 # ─────────────────────────────────────────
-# REKAM SATU SEQUENCE
+# CORE LOGIC: RECORD SINGLE SEQUENCE
 # ─────────────────────────────────────────
 def record_sequence(cap, letter, sample_idx, total_target):
     """
-    Rekam satu sequence landmark.
-    Return (sequence, status) — status: 'saved' | 'retry' | 'quit'
+    Captures a single landmark sequence.
+    Returns (sequence, status) where status is one of: 'saved', 'retry', 'quit'
     """
     sequence = []
     frame_idx = 0
@@ -257,26 +258,26 @@ def record_sequence(cap, letter, sample_idx, total_target):
         else:
             detected = False
 
-        # ── UI ──
-        # Status tangan
+        # ── UI Overlays ──
+        # Hand detection status
         hand_color = GREEN if detected else RED
-        hand_text  = "Tangan terdeteksi" if detected else "Tangan tidak terdeteksi!"
+        hand_text  = "Hand Detected" if detected else "Hand NOT Detected!"
         overlay_text(frame, hand_text, (12, 30), size=0.65, color=hand_color, bg=DARK)
 
-        # Label huruf
+        # Target letter
         overlay_text(frame, letter, (w - 70, 55), size=1.8, color=YELLOW, thickness=3)
 
-        # Progress rekaman
+        # Sequence recording progress bar
         draw_progress_bar(frame, frame_idx, FRAMES_PER_SAMPLE, 12, h - 70, w - 24, 18)
-        overlay_text(frame, f"Merekam... {frame_idx}/{FRAMES_PER_SAMPLE} frame",
+        overlay_text(frame, f"Recording... {frame_idx}/{FRAMES_PER_SAMPLE} frames",
                      (12, h - 80), size=0.6, color=WHITE)
 
-        # Progress sample
+        # Overall collection progress bar
         draw_sample_progress(frame, sample_idx - 1, total_target, 12, h - 35, w - 24, 12)
         overlay_text(frame, f"Sample: {sample_idx}/{total_target}",
                      (12, h - 45), size=0.55, color=GRAY)
 
-        overlay_text(frame, "R=ulangi  Q=keluar", (w - 200, h - 12),
+        overlay_text(frame, "R=Retry  Q=Quit", (w - 180, h - 12),
                      size=0.5, color=GRAY)
 
         cv2.imshow("SIBI Dataset Collector", frame)
@@ -290,10 +291,10 @@ def record_sequence(cap, letter, sample_idx, total_target):
 
 
 # ─────────────────────────────────────────
-# LAYAR: KONFIRMASI SETELAH REKAM
+# UI SCREENS: POST-RECORD CONFIRMATION
 # ─────────────────────────────────────────
 def show_result_screen(cap, letter, saved_path, sample_idx, total_target):
-    """Tampilkan konfirmasi setelah sequence berhasil disimpan."""
+    """Displays a brief confirmation overlay after a sequence is saved."""
     start = time.time()
     while True:
         ret, frame = cap.read()
@@ -307,16 +308,16 @@ def show_result_screen(cap, letter, saved_path, sample_idx, total_target):
         frame = cv2.addWeighted(overlay, 0.55, frame, 0.45, 0)
 
         elapsed = time.time() - start
-        remaining = max(0, 1.5 - elapsed)  # auto-lanjut setelah 1.5 detik
+        remaining = max(0, 1.5 - elapsed)  # Auto-continue after 1.5 seconds
 
-        overlay_text(frame, "[OK] Tersimpan!", (w // 2 - 110, h // 2 - 30),
+        overlay_text(frame, "[OK] Saved!", (w // 2 - 100, h // 2 - 30),
                      size=1.1, color=GREEN, thickness=2)
-        overlay_text(frame, f"Sample {sample_idx}/{total_target}  --  Huruf {letter}",
+        overlay_text(frame, f"Sample {sample_idx}/{total_target}  --  Letter {letter}",
                      (w // 2 - 160, h // 2 + 20), size=0.65, color=WHITE)
-        overlay_text(frame, f"Lanjut otomatis dalam {remaining:.1f}s ...",
-                     (w // 2 - 150, h // 2 + 60), size=0.6, color=GRAY)
-        overlay_text(frame, "SPASI=lanjut sekarang   R=ulangi   Q=keluar",
-                     (w // 2 - 220, h - 30), size=0.55, color=GRAY)
+        overlay_text(frame, f"Auto-continuing in {remaining:.1f}s ...",
+                     (w // 2 - 160, h // 2 + 60), size=0.6, color=GRAY)
+        overlay_text(frame, "SPACE=Continue Now   R=Retry   Q=Quit",
+                     (w // 2 - 250, h - 30), size=0.55, color=GRAY)
 
         cv2.imshow("SIBI Dataset Collector", frame)
         key = cv2.waitKey(1) & 0xFF
@@ -329,10 +330,10 @@ def show_result_screen(cap, letter, saved_path, sample_idx, total_target):
 
 
 # ─────────────────────────────────────────
-# LAYAR: SELESAI PER HURUF
+# UI SCREENS: GESTURE COMPLETE
 # ─────────────────────────────────────────
 def show_letter_done(cap, letter, saved):
-    """Tampilkan layar selesai setelah semua sample satu huruf terkumpul."""
+    """Displays a completion screen when all target samples for a letter are collected."""
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -344,13 +345,13 @@ def show_letter_done(cap, letter, saved):
         cv2.rectangle(overlay, (0, 0), (w, h), (10, 10, 10), -1)
         frame = cv2.addWeighted(overlay, 0.65, frame, 0.35, 0)
 
-        overlay_text(frame, f"Huruf  {letter}  selesai!",
-                     (w // 2 - 140, h // 2 - 40), size=1.1, color=GREEN, thickness=2)
-        overlay_text(frame, f"{saved} sample berhasil dikumpulkan",
-                     (w // 2 - 170, h // 2 + 10), size=0.7, color=WHITE)
-        overlay_text(frame, "Tekan SPASI untuk lanjut ke huruf berikutnya",
-                     (w // 2 - 210, h - 40), size=0.65, color=YELLOW)
-        overlay_text(frame, "Tekan Q untuk keluar",
+        overlay_text(frame, f"Letter  {letter}  Complete!",
+                     (w // 2 - 170, h // 2 - 40), size=1.1, color=GREEN, thickness=2)
+        overlay_text(frame, f"{saved} samples successfully collected",
+                     (w // 2 - 190, h // 2 + 10), size=0.7, color=WHITE)
+        overlay_text(frame, "Press SPACE to move to the next letter",
+                     (w // 2 - 240, h - 40), size=0.65, color=YELLOW)
+        overlay_text(frame, "Press Q to quit",
                      (w // 2 - 100, h - 15), size=0.55, color=GRAY)
 
         cv2.imshow("SIBI Dataset Collector", frame)
@@ -362,39 +363,39 @@ def show_letter_done(cap, letter, saved):
 
 
 # ─────────────────────────────────────────
-# LAYAR: RINGKASAN AKHIR
+# FINAL SUMMARY
 # ─────────────────────────────────────────
 def show_summary():
-    """Print ringkasan dataset ke terminal."""
+    """Prints a dataset collection summary to the terminal."""
     print("\n" + "=" * 50)
-    print("  RINGKASAN DATASET")
+    print("  DATASET SUMMARY")
     print("=" * 50)
     total = 0
     for letter in LETTERS:
         n = count_saved(letter)
         total += n
-        status = "Selesai" if n >= SAMPLES_PER_LETTER else f"Kurang {SAMPLES_PER_LETTER - n} sample"
-        print(f"  {letter}  :  {n:3d} / {SAMPLES_PER_LETTER} sample   [{status}]")
+        status = "Complete" if n >= SAMPLES_PER_LETTER else f"Missing {SAMPLES_PER_LETTER - n} samples"
+        print(f"  {letter}  :  {n:3d} / {SAMPLES_PER_LETTER} samples   [{status}]")
     print("-" * 50)
-    print(f"  Total  :  {total} sample")
-    print(f"  Lokasi :  {os.path.abspath(DATASET_DIR)}/")
+    print(f"  Total  :  {total} samples")
+    print(f"  Path   :  {os.path.abspath(DATASET_DIR)}/")
     print("=" * 50 + "\n")
 
 
 # ─────────────────────────────────────────
-# MAIN LOOP
+# MAIN EXECUTION LOOP
 # ─────────────────────────────────────────
 def main():
     print("\n" + "=" * 50)
     print("  SIBI Dynamic Dataset Collector")
-    print(f"  Huruf: {', '.join(LETTERS)}")
-    print(f"  Target: {SAMPLES_PER_LETTER} sample per huruf")
-    print(f"  Frame per sample: {FRAMES_PER_SAMPLE}")
+    print(f"  Target Letters: {', '.join(LETTERS)}")
+    print(f"  Target Quota: {SAMPLES_PER_LETTER} samples per letter")
+    print(f"  Frames per Sample: {FRAMES_PER_SAMPLE}")
     print("=" * 50)
 
     cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
-        print(f"[ERROR] Kamera index {CAMERA_INDEX} tidak bisa dibuka.")
+        print(f"[ERROR] Unable to open camera with index {CAMERA_INDEX}.")
         return
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -406,15 +407,15 @@ def main():
     try:
         for letter in LETTERS:
             saved = count_saved(letter)
-            print(f"\n[INFO] Huruf {letter}: sudah ada {saved} sample")
+            print(f"\n[INFO] Letter {letter}: {saved} samples already exist")
 
             if saved >= SAMPLES_PER_LETTER:
-                print(f"[SKIP] Huruf {letter} sudah mencapai target.")
+                print(f"[SKIP] Letter {letter} has already met its target quota.")
                 continue
 
-            # Tampilkan panduan
+            # Display gesture guide
             if not show_guide_screen(cap, letter):
-                print("[QUIT] Keluar dari program.")
+                print("[QUIT] Program exited by user.")
                 break
 
             results_holder = [None]
@@ -422,34 +423,34 @@ def main():
             while saved < SAMPLES_PER_LETTER:
                 sample_idx = saved + 1
 
-                # Countdown
+                # Display countdown
                 if not show_countdown(cap, letter, results_holder):
-                    print("[QUIT] Keluar dari program.")
+                    print("[QUIT] Program exited by user.")
                     break
 
-                # Rekam
+                # Execute recording loop
                 sequence, status = record_sequence(cap, letter, sample_idx, SAMPLES_PER_LETTER)
 
                 if status == 'quit':
-                    print("[QUIT] Keluar dari program.")
+                    print("[QUIT] Program exited by user.")
                     break
 
                 if status == 'retry' or len(sequence) < FRAMES_PER_SAMPLE:
-                    print(f"[RETRY] Sample {sample_idx} diulang.")
+                    print(f"[RETRY] Discarding and retrying sample {sample_idx}.")
                     continue
 
-                # Simpan
+                # Save successful recording
                 path = save_sequence(letter, sequence)
                 saved += 1
                 print(f"[SAVED] {path}  ({saved}/{SAMPLES_PER_LETTER})")
 
-                # Konfirmasi
+                # Show save confirmation
                 action = show_result_screen(cap, letter, path, saved, SAMPLES_PER_LETTER)
                 if action == 'quit':
-                    print("[QUIT] Keluar dari program.")
+                    print("[QUIT] Program exited by user.")
                     break
                 if action == 'retry':
-                    # Hapus yang baru saja disimpan dan ulangi
+                    # Delete the just-saved file to retry
                     folder = Path(DATASET_DIR) / letter
                     files = sorted(folder.glob("seq_*.npy"))
                     if files:
@@ -458,9 +459,9 @@ def main():
                     continue
 
             else:
-                # Loop selesai normal
+                # Quota met successfully
                 if not show_letter_done(cap, letter, saved):
-                    print("[QUIT] Keluar dari program.")
+                    print("[QUIT] Program exited by user.")
                     break
 
     finally:

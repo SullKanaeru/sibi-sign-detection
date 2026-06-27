@@ -1,6 +1,7 @@
 """
-Script untuk mengekstrak fitur landmark 3D (x, y, z) dari dataset gambar statis
-dan menyimpannya ke dalam format CSV untuk pelatihan model.
+Feature extraction script for static hand gestures.
+This script extracts 3D hand landmarks (x, y, z) from raw static image datasets
+and compiles them into a structured CSV format for model training.
 """
 
 import os
@@ -10,10 +11,10 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-# Setup MediaPipe
+# Initialize MediaPipe Hands
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
-    static_image_mode=True,       # Karena kita memproses gambar statis satu per satu
+    static_image_mode=True,       # Set to True since we are processing static, unconnected images
     max_num_hands=1,
     min_detection_confidence=0.5
 )
@@ -23,9 +24,14 @@ OUTPUT_CSV = '../data/static_features.csv'
 
 def extract_landmarks(image_path):
     """
-    Membaca gambar, mendeteksi tangan, dan mengembalikan array 1D
-    berisi 63 nilai (21 titik * 3 sumbu).
-    Kembalikan None jika tangan tidak terdeteksi.
+    Reads an image, detects hand landmarks, and flattens them into a 1D array.
+    The resulting array contains 63 values (21 landmarks * 3 coordinates).
+    Returns None if no hand is detected in the image.
+    
+    Args:
+        image_path (str): The absolute or relative path to the image file.
+    Returns:
+        list: A flattened list of 63 float values representing (x, y, z) for each landmark.
     """
     image = cv2.imread(image_path)
     if image is None:
@@ -35,11 +41,10 @@ def extract_landmarks(image_path):
     results = hands.process(image_rgb)
     
     if results.multi_hand_landmarks:
-        # Ambil tangan pertama yang terdeteksi
+        # We assume one hand per image based on max_num_hands=1
         hand_landmarks = results.multi_hand_landmarks[0]
         
-        # Ekstrak koordinat (x, y, z)
-        # Akan menghasilkan list 63 elemen: [x1, y1, z1, x2, y2, z2, ...]
+        # Flatten the (x, y, z) coordinates into a single list
         row = []
         for landmark in hand_landmarks.landmark:
             row.extend([landmark.x, landmark.y, landmark.z])
@@ -48,63 +53,62 @@ def extract_landmarks(image_path):
     return None
 
 def main():
-    print(f"\n[INFO] Memulai ekstraksi fitur dari direktori: {DATA_DIR} ...")
+    print(f"\n[INFO] Starting feature extraction from directory: {DATA_DIR} ...")
     
     dataset_rows = []
-    
     base_path = Path(DATA_DIR)
     
     if not base_path.exists():
-        print(f"[ERROR] Direktori {DATA_DIR} tidak ditemukan!")
+        print(f"[ERROR] Directory {DATA_DIR} not found!")
         return
 
-    # Loop setiap orientasi tangan (kanan/kiri)
-    # Kita menggunakan glob untuk menemukan semua .jpg
+    # Recursively find all .jpg files in the raw dataset directory
     all_images = list(base_path.rglob("*.jpg"))
     total_images = len(all_images)
     
     if total_images == 0:
-        print(f"[ERROR] Tidak ada gambar .jpg ditemukan di dalam {DATA_DIR}.")
+        print(f"[ERROR] No .jpg images found in {DATA_DIR}.")
         return
         
-    print(f"[INFO] Ditemukan {total_images} gambar. Mulai memproses...")
+    print(f"[INFO] Found {total_images} images. Beginning extraction process...")
     
     processed = 0
     failed = 0
     
     for img_path in all_images:
-        # Ambil nama kelas/huruf dari nama foldernya
-        # Contoh path: dataset/kanan/A/0.jpg
-        # img_path.parent.name -> "A"
+        # Deduce class label and hand category from the directory structure
+        # Expected path format: data/raw/<hand_category>/<class_name>/<id>.jpg
         class_name = img_path.parent.name
         hand_category = img_path.parent.parent.name
         
         landmarks = extract_landmarks(str(img_path))
         
         if landmarks is not None:
-            # Tambahkan label huruf dan kategori tangan di depan
+            # Prepend the class label and hand category to the feature vector
             row = [class_name, hand_category] + landmarks
             dataset_rows.append(row)
             processed += 1
         else:
             failed += 1
             
+        # Logging progress every 100 images to prevent terminal flood
         if (processed + failed) % 100 == 0:
-            print(f"       Progres: {processed + failed} / {total_images} diproses...")
+            print(f"       Progress: {processed + failed} / {total_images} processed...")
 
-    # Buat nama kolom untuk CSV
+    # Generate feature column names (x_0, y_0, z_0, ..., x_20, y_20, z_20)
     columns = ['label', 'hand_type']
     for i in range(21):
         columns.extend([f'x_{i}', f'y_{i}', f'z_{i}'])
 
+    # Compile the dataset into a Pandas DataFrame and save it as a CSV file
     df = pd.DataFrame(dataset_rows, columns=columns)
     df.to_csv(OUTPUT_CSV, index=False)
     
     print("=" * 50)
-    print("[INFO] Ekstraksi selesai!")
-    print(f"       Berhasil diekstrak : {processed} gambar")
-    print(f"       Gagal terdeteksi   : {failed} gambar")
-    print(f"       Disimpan ke        : {OUTPUT_CSV}")
+    print("[INFO] Feature extraction complete!")
+    print(f"       Successfully extracted : {processed} images")
+    print(f"       Failed to detect hands : {failed} images")
+    print(f"       Output saved to        : {OUTPUT_CSV}")
     print("=" * 50)
 
 if __name__ == '__main__':

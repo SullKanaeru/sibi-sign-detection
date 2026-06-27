@@ -1,25 +1,35 @@
+"""
+Script for collecting static hand gesture images.
+It uses MediaPipe to visualize hand landmarks while saving raw images to the dataset directory.
+"""
 import os
 import cv2
 import mediapipe as mp
 
-# Setup MediaPipe Hands untuk mendeteksi letak tangan
+# Initialize MediaPipe Hands for robust 3D hand landmark detection
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 
-hands = mp_hands.Hands(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5)
+hands = mp_hands.Hands(
+    static_image_mode=False, 
+    min_detection_confidence=0.5, 
+    min_tracking_confidence=0.5
+)
 
+# Output directory for the raw image dataset
 DATA_DIR = '../data/raw'
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
-# Tentukan kelas/isyarat yang ingin dikumpulkan
-# Anda dapat menambahkan huruf lain di dalam array ini
+# Define the target gesture classes (American Sign Language alphabet)
+# Note: J and Z are dynamic and handled separately.
 classes = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y']
-hands_categories = ['kanan', 'kiri']
-dataset_size = 100 # Jumlah gambar yang akan direkam per kelas per tangan
+hands_categories = ['kanan', 'kiri']  # 'kanan' = Right, 'kiri' = Left
+dataset_size = 100  # Number of samples to record per class per hand category
 
-cap = cv2.VideoCapture(0) # 0 biasanya adalah kamera utama / webcam bawaan
+# Initialize the default webcam
+cap = cv2.VideoCapture(0)
 
 for class_name in classes:
     for hand_cat in hands_categories:
@@ -27,24 +37,25 @@ for class_name in classes:
         if not os.path.exists(class_dir):
             os.makedirs(class_dir)
             
-        print(f"\n[INFO] Bersiap merekam isyarat '{class_name}' dengan TANGAN {hand_cat.upper()}")
-        print("[INFO] Tekan 'q' pada jendela video saat posisi tangan sudah benar dan siap.")
+        print(f"\n[INFO] Preparing to record gesture '{class_name}' with {hand_cat.upper()} hand")
+        print("[INFO] Press 'q' on the video window when your hand is in position and you are ready to start.")
         
-        # Loop untuk menunggu pengguna siap
+        # Idle loop: Wait for the user to get into position and press 'q'
         while True:
             ret, frame = cap.read()
             if not ret:
                 continue
                 
-            frame = cv2.flip(frame, 1) # Mirror gambar agar intuitif
+            # Flip the frame horizontally for an intuitive mirror view
+            frame = cv2.flip(frame, 1)
             
-            # Tambahkan teks panduan di layar
-            cv2.putText(frame, f'TANGAN {hand_cat.upper()} - Isyarat "{class_name}"', 
+            # Display instructional text on the frame
+            cv2.putText(frame, f'{hand_cat.upper()} HAND - Gesture "{class_name}"', 
                         (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2, cv2.LINE_AA)
-            cv2.putText(frame, 'Tekan "q" untuk mulai merekam', 
+            cv2.putText(frame, 'Press "q" to start recording', 
                         (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
                         
-            # Proses gambar menggunakan MediaPipe untuk menampilkan *landmarks*
+            # Process the frame with MediaPipe to display real-time landmarks
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = hands.process(frame_rgb)
             
@@ -57,15 +68,16 @@ for class_name in classes:
                         mp_drawing_styles.get_default_hand_landmarks_style(),
                         mp_drawing_styles.get_default_hand_connections_style())
                         
-            cv2.imshow('Kamera - Pengumpul Data SIBI', frame)
-            # Tunggu sampai tombol 'q' ditekan
+            cv2.imshow('SIBI Dataset Collector', frame)
+            
+            # Break the idle loop when 'q' is pressed
             if cv2.waitKey(25) & 0xFF == ord('q'):
                 break
 
         counter = 0
-        print(f"[INFO] Mulai merekam TANGAN {hand_cat.upper()} untuk isyarat: {class_name}")
+        print(f"[INFO] Started recording {hand_cat.upper()} hand for gesture: {class_name}")
         
-        # Loop untuk mulai merekam frame (sebanyak dataset_size)
+        # Active recording loop: Capture exactly `dataset_size` frames
         while counter < dataset_size:
             ret, frame = cap.read()
             if not ret:
@@ -73,11 +85,12 @@ for class_name in classes:
                 
             frame = cv2.flip(frame, 1)
             
-            # --- SIMPAN GAMBAR MENTAH ---
+            # --- SAVE RAW IMAGE ---
+            # We save the raw frame without landmark overlays to allow clean feature extraction later
             img_path = os.path.join(class_dir, f'{counter}.jpg')
             cv2.imwrite(img_path, frame)
             
-            # --- VISUALISASI SAAT MEREKAM ---
+            # --- VISUALIZATION DURING RECORDING ---
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = hands.process(frame_rgb)
             
@@ -90,13 +103,14 @@ for class_name in classes:
                         mp_drawing_styles.get_default_hand_landmarks_style(),
                         mp_drawing_styles.get_default_hand_connections_style())
                         
-            cv2.putText(frame, f'Merekam TANGAN {hand_cat.upper()} "{class_name}": {counter+1}/{dataset_size}', 
+            # Display recording progress
+            cv2.putText(frame, f'Recording {hand_cat.upper()} "{class_name}": {counter+1}/{dataset_size}', 
                         (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
             
-            cv2.imshow('Kamera - Pengumpul Data SIBI', frame)
-            cv2.waitKey(50) # Jeda (50ms) antar frame
+            cv2.imshow('SIBI Dataset Collector', frame)
+            cv2.waitKey(50)  # 50ms delay between frames ensures slight natural variation in data
             counter += 1
 
-print("\n[INFO] Pengumpulan data selesai!")
+print("\n[INFO] Data collection complete!")
 cap.release()
 cv2.destroyAllWindows()

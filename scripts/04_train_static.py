@@ -1,6 +1,7 @@
 """
-Script untuk melatih model klasifikasi gambar statis SIBI
-menggunakan Deep Learning (TensorFlow/Keras).
+Training script for the static hand gesture classification model.
+Uses a Deep Neural Network (TensorFlow/Keras) with custom feature engineering
+(pairwise distances) to improve accuracy on visually similar signs.
 """
 
 import os
@@ -11,52 +12,54 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 
-# Konfigurasi
+# Configuration paths
 DATA_PATH = '../data/static_features.csv'
 MODEL_NAME = '../models/model_static.keras'
 
 def plot_history(history):
-    """Fungsi untuk memplot loss dan akurasi selama pelatihan."""
+    """Plots and saves the training accuracy and loss history."""
     plt.figure(figsize=(10, 4))
     
-    # Plot akurasi
+    # Accuracy Plot
     plt.subplot(1, 2, 1)
     plt.plot(history.history['accuracy'], label='Train Accuracy')
     plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
-    plt.title('Akurasi Model')
-    plt.ylabel('Akurasi')
+    plt.title('Model Accuracy')
+    plt.ylabel('Accuracy')
     plt.xlabel('Epoch')
     plt.legend(loc='lower right')
     
-    # Plot loss
+    # Loss Plot
     plt.subplot(1, 2, 2)
     plt.plot(history.history['loss'], label='Train Loss')
     plt.plot(history.history['val_loss'], label='Validation Loss')
-    plt.title('Loss Model')
+    plt.title('Model Loss')
     plt.ylabel('Loss')
     plt.xlabel('Epoch')
     plt.legend(loc='upper right')
     
     plt.tight_layout()
     plt.savefig('../logs/static_training_history.png')
-    print("[INFO] Grafik pelatihan disimpan sebagai '../logs/static_training_history.png'")
+    print("[INFO] Training history graph saved as '../logs/static_training_history.png'")
 
 def normalize_landmarks(features):
     """
-    Normalisasi koordinat dan Feature Engineering (Pairwise Distances).
-    1. Mengurangi semua koordinat dengan koordinat pergelangan tangan (wrist).
-    2. Menghitung jarak Euclidean antar setiap pasang titik (210 jarak).
+    Coordinate Normalization and Feature Engineering (Pairwise Distances).
+    1. Subtracts the wrist coordinates (origin) from all other hand landmarks.
+    2. Computes the Euclidean distance between every pair of landmarks (210 pairwise distances).
+    This significantly boosts classification accuracy for highly similar gestures (e.g., U vs R).
     """
     import math
     augmented_features = []
     
     for i in range(len(features)):
         row = features[i]
+        # Wrist coordinates (first 3 elements)
         wx, wy, wz = row[0], row[1], row[2]
         
-        # 1. Normalisasi Koordinat (63 fitur)
+        # 1. Normalize Coordinates (63 features)
         norm_coords = []
-        points = [] # Simpan untuk hitung jarak
+        points = [] # Store points for distance calculation
         for j in range(0, 63, 3):
             nx = row[j] - wx
             ny = row[j+1] - wy
@@ -64,7 +67,7 @@ def normalize_landmarks(features):
             norm_coords.extend([nx, ny, nz])
             points.append((nx, ny, nz))
             
-        # 2. Pairwise Distances (21 * 20 / 2 = 210 fitur)
+        # 2. Pairwise Distances (21 * 20 / 2 = 210 features)
         distances = []
         for p1 in range(21):
             for p2 in range(p1 + 1, 21):
@@ -80,44 +83,44 @@ def normalize_landmarks(features):
 
 def main():
     if not os.path.exists(DATA_PATH):
-        print(f"[ERROR] Dataset {DATA_PATH} tidak ditemukan. Harap jalankan extract_static.py terlebih dahulu.")
+        print(f"[ERROR] Dataset {DATA_PATH} not found. Please run 03_extract_features.py first.")
         return
         
-    print("[INFO] Membaca dataset...")
+    print("[INFO] Loading dataset...")
     df = pd.DataFrame(pd.read_csv(DATA_PATH))
     
-    # Pisahkan fitur dan label
-    # Kolom 0: label (A, B, C...)
-    # Kolom 1: hand_type (kanan, kiri)
-    # Kolom 2-64: koordinat x, y, z
+    # Separate features and labels
+    # Column 0: label (A, B, C...)
+    # Column 1: hand_type (Right, Left)
+    # Column 2-64: x, y, z coordinates
     y_raw = df['label'].values
     hand_types = df['hand_type'].values
     X_raw = df.iloc[:, 2:].values
     
-    # Normalisasi (opsional namun sangat direkomendasikan)
+    # Apply normalization and pairwise feature engineering
     X = normalize_landmarks(X_raw)
     
-    # Encode label menjadi angka (A=0, B=1, dst.)
+    # Encode categorical labels to integers (A=0, B=1, etc.)
     encoder = LabelEncoder()
     y = encoder.fit_transform(y_raw)
     num_classes = len(encoder.classes_)
     
-    print(f"[INFO] Kelas yang ditemukan ({num_classes}): {encoder.classes_}")
+    print(f"[INFO] Found {num_classes} classes: {encoder.classes_}")
     
-    # Simpan mapping label agar nanti saat inferensi kita tahu 0 itu huruf apa
+    # Save the label encoding map for real-time inference
     np.save('../models/static_classes.npy', encoder.classes_)
     
-    # Membagi data latih dan uji (80% train, 20% validation)
+    # Split the dataset (80% training, 20% validation)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
     
-    print(f"[INFO] Jumlah data latih: {len(X_train)}")
-    print(f"[INFO] Jumlah data validasi: {len(X_test)}")
+    print(f"[INFO] Training samples: {len(X_train)}")
+    print(f"[INFO] Validation samples: {len(X_test)}")
     
-    # Membangun Model Jaringan Saraf Tiruan (Dense Neural Network)
-    # Dengan 273 fitur (63 koordinat + 210 jarak), kita menggunakan layer yang lebih lebar
+    # Build the Dense Neural Network Model
+    # Since we use 273 features (63 coordinates + 210 distances), wider layers are preferred.
     model = tf.keras.models.Sequential([
         tf.keras.layers.Dense(256, activation='relu', input_shape=(X_train.shape[1],)),
-        tf.keras.layers.Dropout(0.3), # Mencegah overfitting
+        tf.keras.layers.Dropout(0.3), # Prevent overfitting
         tf.keras.layers.Dense(128, activation='relu'),
         tf.keras.layers.Dropout(0.2),
         tf.keras.layers.Dense(64, activation='relu'),
@@ -130,8 +133,8 @@ def main():
                   
     model.summary()
     
-    # Melatih Model
-    print("[INFO] Memulai pelatihan...")
+    # Train the model
+    print("[INFO] Starting model training...")
     history = model.fit(
         X_train, y_train,
         epochs=50,
@@ -139,15 +142,15 @@ def main():
         validation_data=(X_test, y_test)
     )
     
-    # Evaluasi
+    # Evaluate performance on validation set
     val_loss, val_acc = model.evaluate(X_test, y_test)
-    print(f"\n[INFO] Akurasi Validasi Akhir: {val_acc*100:.2f}%")
+    print(f"\n[INFO] Final Validation Accuracy: {val_acc*100:.2f}%")
     
-    # Simpan Model
+    # Save the trained model
     model.save(MODEL_NAME)
-    print(f"[INFO] Model berhasil disimpan ke '{MODEL_NAME}'")
+    print(f"[INFO] Model successfully saved to '{MODEL_NAME}'")
     
-    # Simpan grafik
+    # Save visualization graph
     plot_history(history)
 
 if __name__ == '__main__':
