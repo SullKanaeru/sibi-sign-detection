@@ -38,7 +38,7 @@ hands = mp_hands.Hands(
 # State Variables for Dynamic Gesture Recording
 is_recording_dynamic = False
 dynamic_frames = []
-MAX_DYNAMIC_FRAMES = 90
+MAX_DYNAMIC_FRAMES = 60
 dynamic_result_text = ""
 dynamic_display_timer = 0 # Frame countdown for how long the dynamic prediction result remains on screen
 
