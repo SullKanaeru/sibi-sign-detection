@@ -47,24 +47,29 @@ def extract_and_normalize_landmarks(hand_landmarks):
     Extracts 21 3D landmarks and applies the same feature engineering pipeline
     used during training to ensure inference is fully consistent.
     
-    Feature set (277 features total for the static model):
+    Feature set (283 features total for the static model):
     1. norm_coords       (63 features): Wrist-relative normalized coordinates for LSTM.
     2. pairwise distances(210 features): Euclidean distances between all landmark pairs.
     3. Scale Invariance              : All features divided by max absolute coordinate.
     4. Signed crossing features (4 features): Signed X/Z differences between index and
        middle fingertips/PIP joints to directly discriminate 'U' (parallel) vs 'R' (crossed).
+    5. T vs X features (6 features): Thumb position and index curl angle to discriminate
+       'T' (thumb tucked) vs 'X' (index hooked).
     
     Returns:
         norm_coords_arr    (np.ndarray, 63): Features for the dynamic LSTM model.
-        augmented_features (np.ndarray, 277): Features for the static Dense model.
+        augmented_features (np.ndarray, 283): Features for the static Dense model.
     """
     import math
     
-    # MediaPipe landmark indices for finger crossing detection
+    # MediaPipe landmark indices
+    IDX_THUMB_TIP  = 4   # Thumb tip
+    IDX_INDEX_MCP  = 5   # Index finger MCP (knuckle)
+    IDX_INDEX_PIP  = 7   # Index finger PIP joint
     IDX_INDEX_TIP  = 8   # Index finger tip
-    IDX_MIDDLE_TIP = 12  # Middle finger tip
-    IDX_INDEX_PIP  = 7   # Index finger PIP (proximal interphalangeal) joint
+    IDX_MIDDLE_MCP = 9   # Middle finger MCP (knuckle)
     IDX_MIDDLE_PIP = 11  # Middle finger PIP joint
+    IDX_MIDDLE_TIP = 12  # Middle finger tip
     
     # Extract the wrist coordinates (landmark index 0)
     wx = hand_landmarks.landmark[0].x
@@ -89,23 +94,56 @@ def extract_and_normalize_landmarks(hand_landmarks):
             dist = math.sqrt(dx*dx + dy*dy + dz*dz)
             distances.append(dist)
             
-    # Scale Invariance: Divide by the maximum absolute coordinate value in this frame
+    # Scale Invariance
     max_val = max([abs(x) for x in norm_coords])
     if max_val > 0:
         norm_coords = [x / max_val for x in norm_coords]
         distances = [d / max_val for d in distances]
     
-    # Signed Finger Crossing Features (4 features)
-    # Positive cross_x_tip means index tip is to the RIGHT of middle tip
-    # In 'R', fingers are crossed so the sign of these values will differ from 'U'
+    # Signed Finger Crossing Features (4 features) - U vs R
     scale = max_val if max_val > 0 else 1.0
     cross_x_tip = (points[IDX_INDEX_TIP][0] - points[IDX_MIDDLE_TIP][0]) / scale
     cross_z_tip = (points[IDX_INDEX_TIP][2] - points[IDX_MIDDLE_TIP][2]) / scale
     cross_x_pip = (points[IDX_INDEX_PIP][0] - points[IDX_MIDDLE_PIP][0]) / scale
     cross_z_pip = (points[IDX_INDEX_PIP][2] - points[IDX_MIDDLE_PIP][2]) / scale
     crossing_features = [cross_x_tip, cross_z_tip, cross_x_pip, cross_z_pip]
+    
+    # T vs X Discriminating Features (6 features)
+    thumb_y_rel_index = (points[IDX_THUMB_TIP][1] - points[IDX_INDEX_MCP][1]) / scale
+    thumb_y_rel_middle = (points[IDX_THUMB_TIP][1] - points[IDX_MIDDLE_MCP][1]) / scale
+    
+    mid_x = (points[IDX_INDEX_MCP][0] + points[IDX_MIDDLE_MCP][0]) / 2.0
+    mid_y = (points[IDX_INDEX_MCP][1] + points[IDX_MIDDLE_MCP][1]) / 2.0
+    mid_z = (points[IDX_INDEX_MCP][2] + points[IDX_MIDDLE_MCP][2]) / 2.0
+    thumb_to_midpoint = math.sqrt(
+        (points[IDX_THUMB_TIP][0] - mid_x)**2 +
+        (points[IDX_THUMB_TIP][1] - mid_y)**2 +
+        (points[IDX_THUMB_TIP][2] - mid_z)**2
+    ) / scale
+    
+    v1 = (points[IDX_INDEX_MCP][0] - points[IDX_INDEX_PIP][0],
+          points[IDX_INDEX_MCP][1] - points[IDX_INDEX_PIP][1],
+          points[IDX_INDEX_MCP][2] - points[IDX_INDEX_PIP][2])
+    v2 = (points[IDX_INDEX_TIP][0] - points[IDX_INDEX_PIP][0],
+          points[IDX_INDEX_TIP][1] - points[IDX_INDEX_PIP][1],
+          points[IDX_INDEX_TIP][2] - points[IDX_INDEX_PIP][2])
+    dot = v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2]
+    mag1 = math.sqrt(v1[0]**2 + v1[1]**2 + v1[2]**2) + 1e-8
+    mag2 = math.sqrt(v2[0]**2 + v2[1]**2 + v2[2]**2) + 1e-8
+    index_curl_angle = dot / (mag1 * mag2)
+    
+    thumb_x_rel_index = (points[IDX_THUMB_TIP][0] - points[IDX_INDEX_MCP][0]) / scale
+    
+    thumb_to_index_pip = math.sqrt(
+        (points[IDX_THUMB_TIP][0] - points[IDX_INDEX_PIP][0])**2 +
+        (points[IDX_THUMB_TIP][1] - points[IDX_INDEX_PIP][1])**2 +
+        (points[IDX_THUMB_TIP][2] - points[IDX_INDEX_PIP][2])**2
+    ) / scale
+    
+    tx_features = [thumb_y_rel_index, thumb_y_rel_middle, thumb_to_midpoint,
+                   index_curl_angle, thumb_x_rel_index, thumb_to_index_pip]
         
-    augmented_features = norm_coords + distances + crossing_features
+    augmented_features = norm_coords + distances + crossing_features + tx_features
     
     return np.array(norm_coords), np.array(augmented_features)
 
